@@ -1,0 +1,119 @@
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "github.com/hyperledger/fabric-contract-api-go/contractapi"
+)
+
+// ExchangeContract represents a collaboration agreement between OR-A and OR-B
+type ExchangeContract struct {
+    ContractID   string `json:"contractID"`
+    PartyA       string `json:"partyA"`      // OR-A
+    PartyB       string `json:"partyB"`      // OR-B
+    Data         string `json:"data"`        // Data being exchanged
+    Status       string `json:"status"`      // e.g., Open, Completed
+    ExchangeDate string `json:"exchangeDate"`// Date of exchange
+}
+
+// SmartContract provides functions for managing contracts and data exchanges
+type SmartContract struct {
+    contractapi.Contract
+}
+
+// InitLedger initializes the ledger with some example exchange contracts
+func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
+    contracts := []ExchangeContract{
+        {ContractID: "1", PartyA: "OR-A", PartyB: "OR-B", Data: "Learning Data 1", Status: "Open", ExchangeDate: "2023-09-17"},
+        {ContractID: "2", PartyA: "OR-A", PartyB: "OR-B", Data: "Learning Data 2", Status: "Completed", ExchangeDate: "2023-08-22"},
+    }
+
+    for _, contract := range contracts {
+        contractJSON, err := json.Marshal(contract)
+        if err != nil {
+            return err
+        }
+
+        err = ctx.GetStub().PutState(contract.ContractID, contractJSON)
+        if err != nil {
+            return fmt.Errorf("failed to put contract to world state: %v", err)
+        }
+    }
+
+    return nil
+}
+
+// CreateExchangeContract creates a new data exchange contract between OR-A and OR-B
+func (s *SmartContract) CreateExchangeContract(ctx contractapi.TransactionContextInterface, contractID string, partyA string, partyB string, data string, exchangeDate string) error {
+    contract := ExchangeContract{
+        ContractID:   contractID,
+        PartyA:       partyA,
+        PartyB:       partyB,
+        Data:         data,
+        Status:       "Open",
+        ExchangeDate: exchangeDate,
+    }
+
+    contractJSON, err := json.Marshal(contract)
+    if err != nil {
+        return err
+    }
+
+    return ctx.GetStub().PutState(contractID, contractJSON)
+}
+
+// UpdateContractStatus updates the status of a contract
+func (s *SmartContract) UpdateContractStatus(ctx contractapi.TransactionContextInterface, contractID string, status string) error {
+    contractJSON, err := ctx.GetStub().GetState(contractID)
+    if err != nil {
+        return fmt.Errorf("failed to read contract: %v", err)
+    }
+    if contractJSON == nil {
+        return fmt.Errorf("contract %s does not exist", contractID)
+    }
+
+    var contract ExchangeContract
+    err = json.Unmarshal(contractJSON, &contract)
+    if err != nil {
+        return err
+    }
+
+    contract.Status = status
+    contractJSON, err = json.Marshal(contract)
+    if err != nil {
+        return err
+    }
+
+    return ctx.GetStub().PutState(contractID, contractJSON)
+}
+
+// GetContract retrieves a contract from the ledger
+func (s *SmartContract) GetContract(ctx contractapi.TransactionContextInterface, contractID string) (*ExchangeContract, error) {
+    contractJSON, err := ctx.GetStub().GetState(contractID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read contract: %v", err)
+    }
+    if contractJSON == nil {
+        return nil, fmt.Errorf("contract %s does not exist", contractID)
+    }
+
+    var contract ExchangeContract
+    err = json.Unmarshal(contractJSON, &contract)
+    if err != nil {
+        return nil, err
+    }
+
+    return &contract, nil
+}
+
+func main() {
+    chaincode, err := contractapi.NewChaincode(new(SmartContract))
+    if err != nil {
+        fmt.Printf("Error creating smart contract: %v", err)
+        return
+    }
+
+    if err := chaincode.Start(); err != nil {
+        fmt.Printf("Error starting smart contract: %v", err)
+    }
+}
