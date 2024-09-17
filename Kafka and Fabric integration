@@ -1,0 +1,51 @@
+from flask import Flask, request, jsonify
+from confluent_kafka import Producer
+import grpc
+import json
+app = Flask(__name__)
+# Kafka Configuration (SASL/PLAIN authentication)
+kafka_config = {
+    'bootstrap.servers': 'your_kafka_server:9092',
+    'security.protocol': 'SASL_PLAINTEXT',
+    'sasl.mechanisms': 'PLAIN',
+    'sasl.username': 'your_username',
+    'sasl.password': 'your_password',
+}
+# Initialize Kafka producer
+producer = Producer(kafka_config)
+# gRPC channel to interact with Fabric
+fabric_channel = grpc.insecure_channel('your_fabric_peer:7051')
+@app.route('/send_to_kafka', methods=['POST'])
+def send_to_kafka():
+    try:
+        data = request.json
+        topic = data['topic']
+        message = json.dumps(data['message'])
+        
+        # Produce message to Kafka
+        producer.produce(topic, value=message)
+        producer.flush()
+
+        return jsonify({'status': 'Message sent to Kafka successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+@app.route('/send_to_fabric', methods=['POST'])
+def send_to_fabric():
+    try:
+        data = request.json
+        
+        # Create a gRPC stub for the Fabric communication
+        # (Assuming a Fabric chaincode call is required)
+        stub = grpc_pb2_grpc.ChaincodeStub(fabric_channel)
+        
+        # Create the request message
+        fabric_request = grpc_pb2.ChaincodeInput(args=data['args'])
+
+        # Send the request to Fabric peer and get the response
+        response = stub.Invoke(fabric_request)
+
+        return jsonify({'status': 'Data sent to Fabric successfully', 'response': response.result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
